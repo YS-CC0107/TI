@@ -7,7 +7,7 @@ from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 import os
 
-st.set_page_config(page_title="GeoJSON エリア判定アプリ", layout="wide")
+st.set_page_config(page_title="定額エリア判別アプリ", layout="wide")
 
 # ==========================================
 # 1. パスワード認証機能
