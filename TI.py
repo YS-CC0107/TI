@@ -91,7 +91,7 @@ with col1:
     address_input = st.text_input(
         "住所または施設名を入力してください：", 
         value=st.session_state.search_query,
-        placeholder="例:ラモール芦屋"
+        placeholder="例: ラモール芦屋"
     )
     
     if st.button("検索実行"):
@@ -117,7 +117,7 @@ with col1:
     st.subheader("判定結果")
     if st.session_state.target_coords:
         lat, lon = st.session_state.target_coords
-        st.write(f" **現在選択中の位置**")
+        st.write(f"**現在選択中の位置**")
         st.write(f"緯度: {lat:.5f} / 経度: {lon:.5f}")
         
         point = Point(lon, lat)
@@ -128,7 +128,7 @@ with col1:
                 area_name = row["source_file"].replace(".geojson", "")
                 st.info(f"エリア名: **{area_name}**")
         else:
-            st.warning("エリア外/メーターのみ")
+            st.warning("エリア外（メーター）")
             
         if st.button("選択位置をクリア"):
             st.session_state.target_coords = None
