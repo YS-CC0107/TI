@@ -91,7 +91,7 @@ with col1:
     address_input = st.text_input(
         "住所または施設名を入力してください：", 
         value=st.session_state.search_query,
-        placeholder="例: ラモール芦屋"
+        placeholder="例:ラモール芦屋"
     )
     
     if st.button("検索実行"):
