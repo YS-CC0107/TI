@@ -12,7 +12,6 @@ st.set_page_config(page_title="定額エリア判別アプリ", layout="wide")
 # ==========================================
 # 1. パスワード認証機能
 # ==========================================
-# ※ 必要に応じて、ここの 'my_password_2026' をお好きな文字列に変更してください。
 PASSWORD = "kobe-MKCC"
 
 if "authenticated" not in st.session_state:
@@ -28,7 +27,7 @@ if not st.session_state.authenticated:
             st.rerun()
         else:
             st.error("パスワードが正しくありません。")
-    st.stop()  # 認証されるまでこれ以降のコードを実行しない
+    st.stop()
 
 # ==========================================
 # 2. アプリ本編
@@ -36,15 +35,12 @@ if not st.session_state.authenticated:
 st.title("定額エリア判別アプリ")
 st.write("「住所・施設名から検索」または「地図上をクリック」してエリアを判定できます。")
 
-# --- セッション状態（データ保持用）の初期化 ---
 if "target_coords" not in st.session_state:
-    st.session_state.target_coords = None  # 判定対象の(緯度, 経度)
+    st.session_state.target_coords = None
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
-if "trigger_rerun" not in st.session_state:
-    st.session_state.trigger_rerun = False
 
-# --- GeoJSONデータの読み込み ---
+# --- GeoJSONデータの読み込み（バラバラな座標系を自動で統一する修正版） ---
 @st.cache_data
 def load_geojson_data(folder_path):
     gdf_list = []
@@ -54,11 +50,20 @@ def load_geojson_data(folder_path):
                 file_path = os.path.join(folder_path, file)
                 try:
                     gdf = gpd.read_file(file_path)
-                    gdf["source_file"] = file  # ファイル名をエリア名として記録
+                    gdf["source_file"] = file
+                    
+                    # 【ここを修正】合体する前に、すべてのデータを世界基準(EPSG:4326 = WGS 84)に強制変換する
+                    if gdf.crs is None:
+                        gdf.set_crs(epsg=4326, inplace=True)
+                    else:
+                        gdf = gdf.to_crs(epsg=4326)
+                        
                     gdf_list.append(gdf)
                 except Exception as e:
                     st.error(f"{file} の読み込みに失敗しました: {e}")
+                    
     if gdf_list:
+        # すべてEPSG:4326に揃ったので、安全に合体できるようになります
         return gpd.pd.concat(gdf_list, ignore_index=True)
     return None
 
@@ -69,13 +74,7 @@ if all_areas is None:
     st.error(f"「{geojson_folder}」フォルダ内に有効なGeoJSONファイルが見つかりません。")
     st.stop()
 
-# 座標系を統一
-if all_areas.crs is None:
-    all_areas.set_crs(epsg=4326, inplace=True)
-elif all_areas.crs.to_string() != "EPSG:4326":
-    all_areas = all_areas.to_crs(epsg=4326)
-
-# 地図の初期中心点を計算
+# 全体データの中心点を計算
 center_lat = all_areas.geometry.centroid.y.mean()
 center_lon = all_areas.geometry.centroid.x.mean()
 
@@ -87,7 +86,6 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.subheader("🔍 住所・施設名から検索")
     
-    # ユーザー入力
     address_input = st.text_input(
         "住所または施設名を入力してください：", 
         value=st.session_state.search_query,
@@ -101,7 +99,6 @@ with col1:
                 geolocator = Nominatim(user_agent="my_geojson_app_2026")
                 location = geolocator.geocode(address_input, timeout=10)
                 if location:
-                    # 検索成功時、その緯度経度をターゲットにする
                     st.session_state.target_coords = (location.latitude, location.longitude)
                     st.rerun()
                 else:
@@ -113,7 +110,6 @@ with col1:
 
     st.write("---")
     
-    # --- エリア判定の処理と表示 ---
     st.subheader("🎯 判定結果")
     if st.session_state.target_coords:
         lat, lon = st.session_state.target_coords
@@ -135,7 +131,7 @@ with col1:
             st.session_state.search_query = ""
             st.rerun()
     else:
-        st.info("💡 左の検索窓から調べるか、右の地図上をクリックしてピンを立ててください。")
+        st.info("💡 左的検索窓から調べるか、右的地図上をクリックしてピンを立ててください。")
 
 # ==========================================
 # 4. 画面右側：インタラクティブ地図エリア
@@ -143,16 +139,14 @@ with col1:
 with col2:
     st.subheader("🗺️ 地図（クリックして直接ピンを立てる）")
     
-    # 地図の中心を決定（検索した場所があればそこを中心に、なければGeoJSONの中心に）
     map_center = [center_lat, center_lon]
     zoom_val = 11
     if st.session_state.target_coords:
         map_center = st.session_state.target_coords
-        zoom_val = 15  # 検索位置がある場合はズームインする
+        zoom_val = 15
 
     m = folium.Map(location=map_center, zoom_start=zoom_val)
 
-    # GeoJSONエリアを描画
     folium.GeoJson(
         all_areas,
         style_function=lambda x: {
@@ -163,7 +157,6 @@ with col2:
         },
     ).add_to(m)
 
-    # ターゲット位置（検索、または手動クリック）に赤いピンを立てる
     if st.session_state.target_coords:
         folium.Marker(
             location=st.session_state.target_coords,
@@ -171,17 +164,13 @@ with col2:
             icon=folium.Icon(color="red", icon="info-sign"),
         ).add_to(m)
 
-    # 地図を表示し、クリックイベントを検知
     map_output = st_folium(m, width="100%", height=550, key="geojson_map")
 
-    # 地図上のクリックを検出した際の処理
     if map_output and map_output.get("last_clicked"):
         clicked = map_output["last_clicked"]
         clicked_coords = (clicked["lat"], clicked["lng"])
         
-        # 連続クリックの誤作動防止をしながら座標を更新
         if st.session_state.target_coords != clicked_coords:
             st.session_state.target_coords = clicked_coords
-            # 手動クリックした際は、住所検索のテキストをリセットする
             st.session_state.search_query = ""
             st.rerun()
