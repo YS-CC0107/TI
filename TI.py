@@ -7,7 +7,7 @@ from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 import os
 
-st.set_page_config(page_title="GeoJSON エリア判定アプリ", layout="wide")
+st.set_page_config(page_title="定額エリア判別アプリ", layout="wide")
 
 # ==========================================
 # 1. パスワード認証機能
@@ -91,7 +91,7 @@ with col1:
     address_input = st.text_input(
         "住所または施設名を入力してください：", 
         value=st.session_state.search_query,
-        placeholder="例: 東京都新宿区 / 東京タワー"
+        placeholder="例: ラモール芦屋"
     )
     
     if st.button("検索実行"):
