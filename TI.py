@@ -32,15 +32,28 @@ if not st.session_state.authenticated:
 # ==========================================
 # 2. アプリ本編
 # ==========================================
-st.title("定額エリア判別アプリ")
+st.title("定額エリア判別アプリ（福岡エリアのみ）")
 st.write("「住所・施設名から検索」または「地図上をクリック」してエリアを判定できます。")
 
 if "target_coords" not in st.session_state:
     st.session_state.target_coords = None
+if "current_address" not in st.session_state:
+    st.session_state.current_address = ""
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
 
-# --- GeoJSONデータの読み込み（バラバラな座標系を自動で統一する修正版） ---
+# 逆ジオコーディング（緯度経度から住所を取得する関数）
+def get_address_from_coords(lat, lon):
+    try:
+        geolocator = Nominatim(user_agent="my_geojson_app_2026")
+        location = geolocator.reverse((lat, lon), timeout=10, language="ja")
+        if location:
+            return location.address
+    except Exception:
+        pass
+    return "住所を取得できませんでした"
+
+# --- GeoJSONデータの読み込み ---
 @st.cache_data
 def load_geojson_data(folder_path):
     gdf_list = []
@@ -52,7 +65,6 @@ def load_geojson_data(folder_path):
                     gdf = gpd.read_file(file_path)
                     gdf["source_file"] = file
                     
-                    # 【ここを修正】合体する前に、すべてのデータを世界基準(EPSG:4326 = WGS 84)に強制変換する
                     if gdf.crs is None:
                         gdf.set_crs(epsg=4326, inplace=True)
                     else:
@@ -63,7 +75,6 @@ def load_geojson_data(folder_path):
                     st.error(f"{file} の読み込みに失敗しました: {e}")
                     
     if gdf_list:
-        # すべてEPSG:4326に揃ったので、安全に合体できるようになります
         return gpd.pd.concat(gdf_list, ignore_index=True)
     return None
 
@@ -74,7 +85,6 @@ if all_areas is None:
     st.error(f"「{geojson_folder}」フォルダ内に有効なGeoJSONファイルが見つかりません。")
     st.stop()
 
-# 全体データの中心点を計算
 center_lat = all_areas.geometry.centroid.y.mean()
 center_lon = all_areas.geometry.centroid.x.mean()
 
@@ -89,7 +99,7 @@ with col1:
     address_input = st.text_input(
         "住所または施設名を入力してください：", 
         value=st.session_state.search_query,
-        placeholder="例:ラモール芦屋"
+        placeholder="例: ラ・モール芦屋 / 兵庫県芦屋市大原町２−６"
     )
     
     if st.button("検索実行"):
@@ -100,6 +110,7 @@ with col1:
                 location = geolocator.geocode(address_input, timeout=10)
                 if location:
                     st.session_state.target_coords = (location.latitude, location.longitude)
+                    st.session_state.current_address = location.address
                     st.rerun()
                 else:
                     st.error("該当する場所が見つかりませんでした。")
@@ -113,8 +124,10 @@ with col1:
     st.subheader("🎯 判定結果")
     if st.session_state.target_coords:
         lat, lon = st.session_state.target_coords
-        st.write(f"📍 **現在選択中の位置**")
-        st.write(f"緯度: {lat:.5f} / 経度: {lon:.5f}")
+        
+        # 住所表示
+        st.markdown(f"📍 **選択した場所の住所:**")
+        st.write(st.session_state.current_address)
         
         point = Point(lon, lat)
         matched_areas = all_areas[all_areas.geometry.contains(point)]
@@ -128,10 +141,11 @@ with col1:
             
         if st.button("選択位置をクリア"):
             st.session_state.target_coords = None
+            st.session_state.current_address = ""
             st.session_state.search_query = ""
             st.rerun()
     else:
-        st.info("💡 左的検索窓から調べるか、右的地図上をクリックしてピンを立ててください。")
+        st.info("💡 左の検索窓から調べるか、右の地図上をクリックしてピンを立ててください。")
 
 # ==========================================
 # 4. 画面右側：インタラクティブ地図エリア
@@ -172,5 +186,7 @@ with col2:
         
         if st.session_state.target_coords != clicked_coords:
             st.session_state.target_coords = clicked_coords
+            # クリックした位置の住所を逆引き検索して自動設定
+            st.session_state.current_address = get_address_from_coords(clicked_coords[0], clicked_coords[1])
             st.session_state.search_query = ""
             st.rerun()
